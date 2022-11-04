@@ -1,0 +1,133 @@
+---
+title: "Visualizations"
+author: "Group Project"
+date: "11/4/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+filename = "ETHUSDT_data.csv"
+```
+
+```{r}
+data <- read.csv(filename)
+```
+
+```{r}
+head(data)
+```
+
+
+```{r}
+
+## Setting proper dates
+dates <- head(data)$open_time
+data$open_date <- as.POSIXct(data$open_time / 1000, origin = "1970-01-01")
+data$close_date <- as.POSIXct(data$close_time / 1000, origin = "1970-01-01")
+
+data <- subset(data, select = -c(open_time, close_time))
+
+## Color
+data$color <- ifelse(data$open < data$close, "red", "green")
+```
+
+
+```{r}
+
+# this function slices the data for our convenience, just like Binance does
+slice_by_period <- function(data, slice) {
+  
+  hour <- 60
+  split <- unlist(strsplit(slice, split = ""))
+  
+  period <- split[1] 
+  quantity <- as.integer(split[2])
+  
+  if (period == "H") {
+    return(data[seq(1, nrow(data), hour * quantity), ])
+  }
+  
+  if (period == "D") {
+    return(data[seq(1, nrow(data), hour * quantity * 24), ])
+  }
+  
+  if (period == "M") {
+    return(data[seq(1, nrow(data), hour * quantity * 24 * 31), ])
+  }
+}
+```
+
+```{r}
+# takes the data and creates data for plotting
+prepare_plot_data <- function(data_) {
+  
+  date <- data_$open_date
+  open <- data_$open
+  close <- data_$close
+  high <- data_$high
+  low <- data_$low
+  
+  date.modif <- date[2:length(date)]
+  
+  open.modif <- open[1:(length(open) - 1)]
+  close.modif <- close[2:length(close)]
+  
+  high.1 <- high[1:(length(high) - 1)]
+  high.2 <- high[2:length(high)]
+  high.modif <- pmax(high.1, high.2)
+  
+  low.1 <- low[1:(length(low) - 1)]
+  low.2 <- low[2:length(low)]
+  low.modif <- pmin(low.1, low.2)
+  
+  color <- ifelse(open.modif > close.modif, "green", "red")
+  
+  return(data.frame(
+    date = date.modif, 
+    open = open.modif,
+    close = close.modif, 
+    high = high.modif,
+    low = low.modif,
+    color = color
+    )
+  )
+}
+```
+
+```{r}
+
+## Plots the pair. Periods can be H1, H2..., D1, D2,..., M1, M2, ... 
+plot_pair <- function(period) {
+  ggplot(prepare_plot_data(slice_by_period(data, period))) + 
+    geom_segment(aes(x = date,
+                     xend = date,
+                     y = open,
+                     yend = close,
+                     colour = color), size = 1) + 
+    geom_segment(aes(x = date,
+                     xend = date,
+                     y = high,
+                     yend = low,
+                     colour = color), size = 0.5) + 
+    ggtitle(paste("ETH/USDT pair price for period", period)) +
+    xlab("Date") + 
+    ylab("Price") + 
+    theme(
+      legend.position = "none",
+      panel.background = element_rect(fill = "white", color = "black"),
+      panel.grid.minor = element_line(color = "gray"),
+    ) 
+}
+```
+
+```{r}
+ggsave("ETHUSDT_daily.png", plot_pair("D1"), width = 12, height = 7)
+ggsave("ETHUSDT_hourly.png", plot_pair("H1"), width = 12, height = 7)
+ggsave("ETHUSDT_monthly.png", plot_pair("M1"), width = 12, height = 7)
+```
+
